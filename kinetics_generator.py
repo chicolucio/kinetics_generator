@@ -15,7 +15,7 @@ class KineticsGenerator:
                  order=0,
                  sigma_time=0,
                  sigma_conc=0,
-                 sigma_k=0):
+                 sigma_rate=0):
         self.t0 = 0
         self.tf = time
         self.size = size
@@ -24,7 +24,7 @@ class KineticsGenerator:
         self.order = order
         self.sigma_time = sigma_time
         self.sigma_conc = sigma_conc
-        self.sigma_k = sigma_k
+        self.sigma_k = sigma_rate
 
         def _rate_constant(self):
             return unumpy.uarray(self.k, self.sigma_k)
