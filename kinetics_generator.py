@@ -185,3 +185,19 @@ class KineticsGenerator:
             ax.legend(loc='best', fontsize=14)
 
         return ax
+
+    def export_csv(self, conc_label='[A]', time_label='time', filename='kinetics_generator_data'):
+        conc = unumpy.nominal_values(self.conc_array_u)
+        conc_unc = unumpy.std_devs(self.conc_array_u)
+
+        time = unumpy.nominal_values(self.time_array_u)
+        time_unc = unumpy.std_devs(self.time_array_u)
+
+        header_string = conc_label + ',' + conc_label + \
+            ' error' + ',' + time_label + ',' + time_label + ' error'
+
+        file = filename + '.csv'
+
+        np.savetxt(file, list(zip(conc, conc_unc, time, time_unc)),
+                   header=header_string, delimiter=",")
+        return
