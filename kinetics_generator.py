@@ -1,28 +1,26 @@
 import numpy as np
-import scipy.stats
-from uncertainties import unumpy
+from uncertainties import unumpy, ufloat
 import matplotlib.pyplot as plt
-from scipy import stats
+from scipy import stats, odr
 import re
 
 
 class KineticsGenerator:
 
     def __init__(self,
-                 t0=0,
-                 tf=1000,
+                 time=1000,
                  size=10,
                  conc0=1,
-                 k=1,
+                 rate_constant=1,
                  order=0,
                  sigma_time=0,
                  sigma_conc=0,
                  sigma_k=0):
-        self.t0 = t0
-        self.tf = tf
+        self.t0 = 0
+        self.tf = time
         self.size = size
         self.conc0 = conc0
-        self.k = k
+        self.k = rate_constant
         self.order = order
         self.sigma_time = sigma_time
         self.sigma_conc = sigma_conc
@@ -34,20 +32,13 @@ class KineticsGenerator:
         self.rate = _rate_constant(self)
 
         def _initial_conc(self):
-            random_err = scipy.stats.norm.rvs(
-                loc=0, scale=self.sigma_conc, size=1)
-            conc = self.conc0 + random_err
-            return unumpy.uarray(conc, abs(random_err))
+            return ufloat(self.conc0, self.sigma_conc)
 
         self.conc0_u = _initial_conc(self)
 
         def _time_array(self):
             array = np.linspace(self.t0, self.tf, self.size)
-            random_err = scipy.stats.norm.rvs(
-                loc=0, scale=self.sigma_time, size=self.size)
-            time = array + random_err
-            time = unumpy.uarray(time, abs(random_err))
-            time[time < 0] = 0
+            time = unumpy.uarray(array, self.sigma_time)
             return time
 
         self.time_array_u = _time_array(self)
@@ -62,19 +53,15 @@ class KineticsGenerator:
                 (1 + self.rate * self.time_array_u * self.conc0_u)
         else:
             raise ValueError('Order not valid')
-
-        array[array < 0] = 0
         self.conc_array_u = array
 
         def _half_life(self):
             if self.order == 0:
                 half_life = self.conc0_u / (2 * self.rate)
-                half_life = half_life[0]
             elif self.order == 1:
                 half_life = np.log(2) / self.rate
             elif self.order == 2:
                 half_life = 1 / (self.rate * self.conc0_u)
-                half_life = half_life[0]
             else:
                 raise ValueError('Order not valid')
 
@@ -139,11 +126,37 @@ class KineticsGenerator:
         x_err = unumpy.std_devs(x)
         y_err = unumpy.std_devs(y)
 
+        x_err[x_err == 0] = 1e-30
+        y_err[y_err == 0] = 1e-30
+
         return x_values, x_err, y_values, y_err
 
     def _linear_fit(self, x, y):
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-        return slope, intercept, r_value, p_value, std_err
+        return slope, intercept, r_value**2, p_value, std_err
+
+    def _linear_func(self, B, x):
+        return B[0]*x + B[1]
+
+    def _odr_r_squared(self, y_pred, y):
+        y_abs_error = y_pred - y
+        r2 = 1 - (np.var(y_abs_error) / np.var(y))
+        return r2
+
+    def _odr(self, x, y, x_err, y_err):
+        lin_reg = self._linear_fit(x, y)
+        linear_model = odr.Model(self._linear_func)
+        data = odr.RealData(x, y, sx=x_err, sy=y_err)
+        odr_fit = odr.ODR(data, linear_model, beta0=lin_reg[0:2])
+        out = odr_fit.run()
+
+        slope = out.beta[0]
+        intercept = out.beta[1]
+        r2 = self._odr_r_squared(out.y, y)
+        slope_std_err = out.sd_beta[0]
+        intercept_std_err = out.sd_beta[0]
+
+        return slope, intercept, r2, slope_std_err, intercept_std_err
 
     def plot(self, size=(8, 6), plot_type='conc', ax=None, time_unit='second',
              formula='A', conc_unit='mol/L', conc_or_p='conc',
@@ -162,12 +175,12 @@ class KineticsGenerator:
                     yerr=y_err, ecolor='k', capsize=3)
 
         if linear_fit:
-            slope, intercept, r_value, p_value, std_err = self._linear_fit(
-                x_values, y_values)
+            slope, intercept, r2, slope_std_err, intercept_std_err = self._odr(
+                x_values, y_values, x_err, y_err)
             ax.plot(x_values, slope * x_values + intercept,
                     label='y={:.2E}x{:+.2E}  $R^2= {:.2f}$'.format(slope,
                                                                    intercept,
-                                                                   r_value**2))
+                                                                   r2))
 
             ax.legend(loc='best', fontsize=14)
 
