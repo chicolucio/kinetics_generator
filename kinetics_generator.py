@@ -27,16 +27,38 @@ class KineticsGenerator:
         self.sigma_k = sigma_rate
 
         def _rate_constant(self):
+            """Joins nominal value and standard deviation for rate constant
+
+            Returns
+            -------
+            numpy.ndarray
+                Rate constant with nominal value and standard deviation
+            """
             return unumpy.uarray(self.k, self.sigma_k)
 
         self.rate = _rate_constant(self)
 
         def _initial_conc(self):
+            """Joins nominal value and standard deviation for initial
+            concentration
+
+            Returns
+            -------
+            numpy.ndarray
+                Initial concentration with nominal value and standard deviation
+            """
             return ufloat(self.conc0, self.sigma_conc)
 
         self.conc0_u = _initial_conc(self)
 
         def _time_array(self):
+            """Creates a time array with values and the standard deviation
+
+            Returns
+            -------
+            numpy.ndarray
+                Time array with nominal values and standard deviation
+            """
             array = np.linspace(self.t0, self.tf, self.size)
             time = unumpy.uarray(array, self.sigma_time)
             return time
@@ -56,6 +78,18 @@ class KineticsGenerator:
         self.conc_array_u = array
 
         def _half_life(self):
+            """Calculates the half life for the data
+
+            Returns
+            -------
+            uncertainties.core.AffineScalarFunc
+                Half life with nominal value and standard deviation
+
+            Raises
+            ------
+            ValueError
+                Error when order is not 0, 1 or 2
+            """
             if self.order == 0:
                 half_life = self.conc0_u / (2 * self.rate)
             elif self.order == 1:
@@ -72,6 +106,34 @@ class KineticsGenerator:
     def _plot_params(self, ax=None, plot_type='conc', time_unit='second',
                      formula='A', conc_unit='mol/L', size=12,
                      conc_or_p='conc'):
+        """Internal function for plot parameters.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes, optional
+            axes for the plot, by default None
+        plot_type : str, optional
+            Plot type. 'conc' for concentration vs time; 'ln_conc' for
+            ln(concentration) vs time; or 'inv_conc' for 1/concentration vs
+            time.By default 'conc'
+        time_unit : str, optional
+            Time unit, by default 'second'
+        formula : str, optional
+            Chemical formula to be shown in vertical axis, by default 'A'
+        conc_unit : str, optional
+            Concentration unit, by default 'mol/L'
+        size : int, optional
+            Size reference for labels and text, by default 12
+        conc_or_p : str, optional
+            If data is for concentration ('conc') or pressure ('p'), by default
+            'conc'
+
+        Raises
+        ------
+        ValueError
+            Error when plot_type is not 'conc', 'ln_conc' or 'inv_conc'
+        """
+
         linewidth = 2
 
         # grid and ticks settings
@@ -108,6 +170,25 @@ class KineticsGenerator:
         return
 
     def _xy(self, plot_type='conc'):
+        """Returns the x and y values, and their errors, for plots
+
+        Parameters
+        ----------
+        plot_type : str, optional
+            Plot type. 'conc' for concentration vs time; 'ln_conc' for
+            ln(concentration) vs time; or 'inv_conc' for 1/concentration vs
+            time.By default 'conc'
+
+        Returns
+        -------
+        tuple
+            x values, x errors, y values and y errors
+
+        Raises
+        ------
+        ValueError
+            Error when plot_type is not 'conc', 'ln_conc' or 'inv_conc'
+        """
         if plot_type == 'conc':
             x = self.time_array_u
             y = self.conc_array_u
@@ -132,18 +213,79 @@ class KineticsGenerator:
         return x_values, x_err, y_values, y_err
 
     def _linear_fit(self, x, y):
+        """Ordinary least squares (OLS) regression for x and y
+
+        Parameters
+        ----------
+        x : array
+            x values
+        y : array
+            y values
+
+        Returns
+        -------
+        tuple
+            Regression results
+        """
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         return slope, intercept, r_value**2, p_value, std_err
 
     def _linear_func(self, B, x):
+        """Linear function to be used as model for orthogonal distance
+        regression (ODR).
+
+        Parameters
+        ----------
+        B : array
+            Parameters [slope, intercept]
+        x : array
+            x values
+
+        Returns
+        -------
+        array
+            array of y values
+        """
         return B[0]*x + B[1]
 
     def _odr_r_squared(self, y_pred, y):
+        """R2 calculation for ODR
+
+        Parameters
+        ----------
+        y_pred : array
+            predicted values from ODR
+        y : [type]
+            values passed to ODR
+
+        Returns
+        -------
+        float
+            R squared
+        """
         y_abs_error = y_pred - y
         r2 = 1 - (np.var(y_abs_error) / np.var(y))
         return r2
 
     def _odr(self, x, y, x_err, y_err):
+        """Orthogonal distance regression (ODR).
+
+        Parameters
+        ----------
+        x : array
+            x values
+        y : array
+            y values
+        x_err : array
+            x standard deviations
+        y_err : array
+            y standard deviations
+
+        Returns
+        -------
+        tuple
+            Regression results
+        """
         lin_reg = self._linear_fit(x, y)
         linear_model = odr.Model(self._linear_func)
         data = odr.RealData(x, y, sx=x_err, sy=y_err)
@@ -161,6 +303,34 @@ class KineticsGenerator:
     def plot(self, size=(8, 6), plot_type='conc', ax=None, time_unit='second',
              formula='A', conc_unit='mol/L', conc_or_p='conc',
              linear_fit=False):
+        """Plot function
+
+        Parameters
+        ----------
+        size : tuple, optional
+            Plot size, by default (8, 6)
+        plot_type : str, optional
+            Plot type. 'conc' for concentration vs time; 'ln_conc' for
+            ln(concentration) vs time; or 'inv_conc' for 1/concentration vs
+            time.By default 'conc'
+        ax : matplotlib.axes, optional
+            axes for the plot, by default None
+        time_unit : str, optional
+            Time unit, by default 'second'
+        formula : str, optional
+            Chemical formula to be shown in vertical axis, by default 'A'
+        conc_unit : str, optional
+            Concentration unit, by default 'mol/L'
+        If data is for concentration ('conc') or pressure ('p'), by default
+        'conc'
+        linear_fit : bool, optional
+            If a linear regression line will be shown, by default False
+
+        Returns
+        -------
+        matplotlib.axes
+            Plot
+        """
 
         if ax is None:
             fig, ax = plt.subplots(figsize=size, facecolor=(1.0, 1.0, 1.0))
@@ -187,6 +357,17 @@ class KineticsGenerator:
         return ax
 
     def export_csv(self, conc_label='[A]', time_label='time', filename='kinetics_generator_data'):
+        """Creates a csv file with concentration and time values
+
+        Parameters
+        ----------
+        conc_label : str, optional
+            Label for concentration/pressure, by default '[A]'
+        time_label : str, optional
+            Label for time, by default 'time'
+        filename : str, optional
+            File name (without extension), by default 'kinetics_generator_data'
+        """
         conc = unumpy.nominal_values(self.conc_array_u)
         conc_unc = unumpy.std_devs(self.conc_array_u)
 
