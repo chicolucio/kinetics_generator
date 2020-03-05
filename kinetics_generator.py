@@ -140,7 +140,7 @@ class KineticsGenerator:
         ax.minorticks_on()
         ax.grid(b=True, which='major', linestyle='--',
                 linewidth=linewidth - 0.5)
-        ax.grid(b=True, which='minor', axis='x',
+        ax.grid(b=True, which='minor', axis='both',
                 linestyle=':', linewidth=linewidth - 1)
         ax.tick_params(which='both', labelsize=size+2)
         ax.tick_params(which='major', length=6, axis='both')
@@ -356,7 +356,8 @@ class KineticsGenerator:
 
         return ax
 
-    def export_csv(self, conc_label='[A]', time_label='time', filename='kinetics_generator_data'):
+    def export_csv(self, conc_label='[A]', time_label='time',
+                   filename='kinetics_generator_data'):
         """Creates a csv file with concentration and time values
 
         Parameters
